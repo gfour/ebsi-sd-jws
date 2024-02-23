@@ -10,6 +10,17 @@ from jose import jwk, jws
 # https://code.europa.eu/ebsi/ecosystem/-/blob/260d06744f9116fb73fe307e0a80e21315245dc9/drafts/draft-sd-jws.md
 USE_EBIP_EXAMPLE = True
 
+ALG = "ES256"
+# Taken from: https://python-jose.readthedocs.io/en/latest/jwk/index.html
+TEST_HMAC_KEY = {
+    "kty": "oct",
+    "kid": "018c0ae5-4d9b-471b-bfd6-eef314bc7037",
+    "use": "sig",
+    "alg": "HS256",
+    "k": "hJtXIZ2uSN5kbQfbtTNWbpdmhkV8FJG-Onbc6mxCcYg"
+}
+TEST_KEY = jwk.construct(TEST_HMAC_KEY)
+
 
 def to_compact_json(d) -> str:
     return json.dumps(d, separators=(',', ':'))
@@ -89,16 +100,7 @@ def process(in_json: dict) -> Tuple[dict, list, list]:
 
 
 def issue(sd_json, disclosures):
-    ALG = "ES256"
-    # Taken from: https://python-jose.readthedocs.io/en/latest/jwk/index.html
-    hmac_key = {
-        "kty": "oct",
-        "kid": "018c0ae5-4d9b-471b-bfd6-eef314bc7037",
-        "use": "sig",
-        "alg": "HS256",
-        "k": "hJtXIZ2uSN5kbQfbtTNWbpdmhkV8FJG-Onbc6mxCcYg"
-    }
-    payload_and_signature = jws.sign(sd_json, jwk.construct(hmac_key), algorithm=ALG)
+    payload_and_signature = jws.sign(sd_json, TEST_KEY, algorithm=ALG)
     header = {"typ": "JWT", "alg": ALG, "b64": False, "crit": ["b64"]}
     protected = base64_encode(to_compact_json(header).encode())
     jwt_header = base64_encode(to_compact_json({
@@ -110,7 +112,7 @@ def issue(sd_json, disclosures):
     payload = str(
         {"sd": sd_payload, "disclosures": [x[0] for x in disclosures]}
     ).replace("'", '\"')
-    signed_payload = jws.sign(payload.encode(), jwk.construct(hmac_key), algorithm=ALG)
+    signed_payload = jws.sign(payload.encode(), TEST_KEY, algorithm=ALG)
     print(json.dumps({
         "signature": signed_payload[signed_payload.rfind(".")+1:],
         "payload": payload,
