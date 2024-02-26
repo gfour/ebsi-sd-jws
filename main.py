@@ -85,7 +85,7 @@ def process(in_json: dict) -> Tuple[dict, list, list]:
         digest = base64_encode(hashlib.sha256(calculated_disclosure.encode()).digest())
         print(f"calculated Digest: {digest}")
         digests.append(digest)
-        disclosures.append((digest, salt, json_path, value))
+        disclosures.append((calculated_disclosure, digest, salt, json_path, value))
     in_json["_sd"] = digests
     in_json["_sd_alg"] = "sha-256"
 
