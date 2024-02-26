@@ -4,7 +4,7 @@ import hashlib
 import os
 from typing import Any, List, Tuple
 
-from jose import jwk, jws
+from jose import jwk, jws, jwt
 
 # Use example from:
 # https://code.europa.eu/ebsi/ecosystem/-/blob/260d06744f9116fb73fe307e0a80e21315245dc9/drafts/draft-sd-jws.md
@@ -28,6 +28,12 @@ def to_compact_json(d) -> str:
 
 def base64_encode(s) -> str:
     return base64.urlsafe_b64encode(s).rstrip(b"=").decode("utf-8")
+
+
+def base64_decode(s) -> str:
+    # infer padding
+    padding = '=' * (4 - (len(s) % 4))
+    return base64.urlsafe_b64decode(s + padding).decode("utf-8")
 
 
 def generate_salt(nr_bytes=16) -> str:
@@ -66,6 +72,10 @@ def escape_quotes(obj: object) -> object:
         return obj
 
 
+def get_digest(calculated_disclosure):
+    return base64_encode(hashlib.sha256(calculated_disclosure.encode()).digest())
+
+
 def process(in_json: dict) -> Tuple[dict, list, list]:
     json_paths = [
         "$.credentialSubject.familyName",
@@ -82,7 +92,7 @@ def process(in_json: dict) -> Tuple[dict, list, list]:
         print(f"Content: {content}")
         calculated_disclosure = base64_encode(content.encode("utf-8"))
         print(f"calculated Disclosure: {calculated_disclosure}")
-        digest = base64_encode(hashlib.sha256(calculated_disclosure.encode()).digest())
+        digest = get_digest(calculated_disclosure)
         print(f"calculated Digest: {digest}")
         digests.append(digest)
         disclosures.append((calculated_disclosure, digest, salt, json_path, value))
@@ -99,7 +109,7 @@ def process(in_json: dict) -> Tuple[dict, list, list]:
     return in_json, digests, disclosures
 
 
-def issue(sd_json, disclosures):
+def issue(sd_json, disclosures) -> dict:
     payload_and_signature = jws.sign(sd_json, TEST_KEY, algorithm=ALG)
     header = {"typ": "JWT", "alg": ALG, "b64": False, "crit": ["b64"]}
     protected = base64_encode(to_compact_json(header).encode())
@@ -108,12 +118,32 @@ def issue(sd_json, disclosures):
         {"sd": payload_and_signature, "disclosures": [x[0] for x in disclosures]}
     ).replace("'", '\"')
     signed_payload = jws.sign(payload.encode(), TEST_KEY, algorithm=ALG)
-    print(json.dumps({
+    flat_json = {
         "signature": signed_payload[signed_payload.rfind(".")+1:],
         "payload": payload,
         "protected": protected,
-    }, indent=4))
+    }
+    print(json.dumps(flat_json, indent=4))
     print()
+    return flat_json
+
+
+def present(flat_json: dict):
+    print(f"===== Presentation ==============")
+    json_payload = json.loads(flat_json["payload"])
+    sd = json_payload["sd"]
+    print("sd:", sd)
+    disclosures = json_payload["disclosures"]
+
+    for disclosure_index in range(0, len(disclosures)):
+        print(f"===== Presentation of disclosure {disclosure_index} ==============")
+        disclosure = disclosures[disclosure_index]
+        print("providing disclosure:", disclosure)
+        disclosure_digest = get_digest(disclosure)
+        decoded_jwt = jwt.decode(json_payload["sd"], key=TEST_KEY)
+        verified = decoded_jwt["_sd"][disclosure_index] == disclosure_digest
+        print("verified:", verified)
+        print("decoded:", base64_decode(disclosure))
 
 
 def main():
@@ -124,7 +154,8 @@ def main():
         print(json.dumps(in_json, indent=4))
         print()
         sd_json, digests, disclosures = process(in_json)
-        issue(sd_json, disclosures)
+        flat_json = issue(sd_json, disclosures)
+        present(flat_json)
 
 
 if __name__ == '__main__':
