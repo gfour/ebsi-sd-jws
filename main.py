@@ -103,14 +103,9 @@ def issue(sd_json, disclosures):
     payload_and_signature = jws.sign(sd_json, TEST_KEY, algorithm=ALG)
     header = {"typ": "JWT", "alg": ALG, "b64": False, "crit": ["b64"]}
     protected = base64_encode(to_compact_json(header).encode())
-    jwt_header = base64_encode(to_compact_json({
-        "typ": "JWT",
-        "alg": "ES256"
-    }).encode())
-    sd_payload = f"{jwt_header}.{payload_and_signature}"
     print("======== Issuance ================")
     payload = str(
-        {"sd": sd_payload, "disclosures": [x[0] for x in disclosures]}
+        {"sd": payload_and_signature, "disclosures": [x[0] for x in disclosures]}
     ).replace("'", '\"')
     signed_payload = jws.sign(payload.encode(), TEST_KEY, algorithm=ALG)
     print(json.dumps({
